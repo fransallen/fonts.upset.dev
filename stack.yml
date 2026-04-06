@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  fonts-upset-dev:
+    image: ghcr.io/fransallen/fonts.upset.dev:latest
+
+    ports:
+      - "8081:8080"
+
+    deploy:
+      replicas: 2
+
+      # Resource limits
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256MB
+
+      # Update strategy
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+        failure_action: rollback
+
+      # Rollback strategy
+      rollback_config:
+        parallelism: 1
+        delay: 5s
+
+      # Restart policy
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 3
+        window: 120s

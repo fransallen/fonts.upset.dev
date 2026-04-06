@@ -1,0 +1,7 @@
+{
+  "name": "fonts.upset.dev",
+  "scripts": {
+    "dev": "air",
+    "test": "go test ./..."
+  }
+}
