@@ -46,7 +46,17 @@ cd fonts.upset.dev
 go run .
 ```
 
+## Run with Docker
+
+```sh
+docker run -d --name fonts.upset.dev -p 8080:8080 ghcr.io/fransallen/fonts.upset.dev
+```
+
 The server listens on `http://localhost:8080`.
+
+## Deployment
+
+**fonts.upset.dev** can be self-hosted using Docker or deployed to your preferred platform, like Fly, Render, or Railway.
 
 ## Environment variables
 
