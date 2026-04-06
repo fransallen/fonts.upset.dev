@@ -54,7 +54,7 @@ docker run -d --name fonts.upset.dev -p 8080:8080 ghcr.io/fransallen/fonts.upset
 
 The server listens on `http://localhost:8080`.
 
-## Deployment
+## Self-Hosting
 
 **fonts.upset.dev** can be self-hosted using Docker or deployed to your preferred platform, like Fly, Render, or Railway.
 
