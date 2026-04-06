@@ -25,6 +25,6 @@ COPY . /app
 RUN echo "$GITHUB_TAG" > /app/version
 RUN echo /app/version
 
-EXPOSE 8000
+EXPOSE 8080
 
 CMD ["./app"]
