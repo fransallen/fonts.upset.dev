@@ -1,11 +1,13 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -27,6 +29,10 @@ var (
 	// slow font-file transfers (longer timeout) don't affect CSS fetches.
 	cssClient  = &http.Client{Timeout: 10 * time.Second}
 	fontClient = &http.Client{Timeout: 30 * time.Second}
+
+	// Local disk cache.
+	cacheEnabled bool
+	cacheDir     string
 )
 
 func main() {
@@ -40,6 +46,25 @@ func main() {
 	}
 	if popID := os.Getenv("POP_ID"); popID != "" {
 		version += "-" + popID
+	}
+
+	// Initialise local cache.
+	cacheEnabled = os.Getenv("CACHE_ENABLED") == "true"
+	cacheDir = os.Getenv("CACHE_DIR")
+	if cacheDir == "" {
+		cacheDir = ".fonts-cache"
+	}
+	if cacheEnabled {
+		for _, sub := range []string{"css", "fonts"} {
+			if err := os.MkdirAll(filepath.Join(cacheDir, sub), 0755); err != nil {
+				log.Printf("cache: failed to create %s dir: %v — disabling cache", sub, err)
+				cacheEnabled = false
+				break
+			}
+		}
+		if cacheEnabled {
+			log.Printf("cache: enabled, directory=%s", cacheDir)
+		}
 	}
 
 	http.HandleFunc("/", handleRequest)
@@ -78,35 +103,58 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("The requested resource was not found. To learn how to use fonts.upset.dev, please visit https://upset.dev/fonts"))
 }
 
+// cssCachePath returns the cache file path for a CSS URL.
+func cssCachePath(url string) string {
+	h := sha256.Sum256([]byte(url))
+	return filepath.Join(cacheDir, "css", fmt.Sprintf("%x.css", h))
+}
+
+// fontCacheBase returns the base cache path for a font URL.
+// The body is stored at this path; the Content-Type is stored at this path + ".ct".
+func fontCacheBase(url string) string {
+	h := sha256.Sum256([]byte(url))
+	ext := filepath.Ext(url)
+	if ext == "" {
+		ext = ".font"
+	}
+	return filepath.Join(cacheDir, "fonts", fmt.Sprintf("%x%s", h, ext))
+}
+
 // fetchCSS fetches the font CSS from Google using a fixed browser user-agent string
 // to make sure the correct CSS is returned and rewrites the font URLs to proxy them
 // through the worker (on the same origin to avoid a new connection).
 // No user request headers (IP, cookies, etc.) are forwarded to Google.
-func fetchCSS(url string) (string, error) {
+func fetchCSS(url string) (string, bool, error) {
 	if strings.HasPrefix(url, "/") {
 		url = "https:" + url
 	}
 
+	if cacheEnabled {
+		if data, err := os.ReadFile(cssCachePath(url)); err == nil {
+			return string(data), true, nil
+		}
+	}
+
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	req.Header.Set("User-Agent", userAgent)
 
 	resp, err := cssClient.Do(req)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return "", false, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	fontCSS := string(body)
@@ -131,13 +179,35 @@ func fetchCSS(url string) (string, error) {
 	// Rewrite all of the font URLs to come through the worker
 	minified = regexp.MustCompile(`(?i)(https?:)?//fonts\.gstatic\.com/s/`).ReplaceAllString(minified, "/f/")
 
-	return minified, nil
+	if cacheEnabled {
+		if err := os.WriteFile(cssCachePath(url), []byte(minified), 0644); err != nil {
+			log.Printf("cache: failed to write CSS: %v", err)
+		}
+	}
+
+	return minified, false, nil
 }
 
 // proxyRequest generates a new request based on the original. Filters the request
 // headers to prevent leaking user data (cookies, etc) and filters the response
 // headers to prevent the origin setting policy on our origin.
 func proxyRequest(w http.ResponseWriter, r *http.Request, url string) {
+	if cacheEnabled {
+		base := fontCacheBase(url)
+		if body, err := os.ReadFile(base); err == nil {
+			ct, _ := os.ReadFile(base + ".ct")
+			if len(ct) > 0 {
+				w.Header().Set("Content-Type", string(ct))
+			}
+			w.Header().Set("X-Content-Type-Options", "nosniff")
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			w.Header().Set("X-Fonts-Cache", "HIT")
+			w.WriteHeader(http.StatusOK)
+			w.Write(body)
+			return
+		}
+	}
+
 	req, err := http.NewRequest(r.Method, url, nil)
 	if err != nil {
 		http.Error(w, "Failed to create request", http.StatusInternalServerError)
@@ -177,14 +247,38 @@ func proxyRequest(w http.ResponseWriter, r *http.Request, url string) {
 
 	// Add security header
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	if cacheEnabled {
+		w.Header().Set("X-Fonts-Cache", "MISS")
+	}
 
 	w.WriteHeader(resp.StatusCode)
+
+	if cacheEnabled && resp.StatusCode == http.StatusOK {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			http.Error(w, "Failed to read resource", http.StatusBadGateway)
+			return
+		}
+		base := fontCacheBase(url)
+		if err := os.MkdirAll(filepath.Dir(base), 0755); err == nil {
+			if err := os.WriteFile(base, body, 0644); err != nil {
+				log.Printf("cache: failed to write font: %v", err)
+			} else if ct := resp.Header.Get("Content-Type"); ct != "" {
+				if err := os.WriteFile(base+".ct", []byte(ct), 0644); err != nil {
+					log.Printf("cache: failed to write font content-type: %v", err)
+				}
+			}
+		}
+		w.Write(body)
+		return
+	}
+
 	io.Copy(w, resp.Body)
 }
 
 // proxyStylesheet handles a proxied stylesheet request
 func proxyStylesheet(w http.ResponseWriter, _ *http.Request, url string) {
-	css, err := fetchCSS(url)
+	css, hit, err := fetchCSS(url)
 	if err != nil {
 		http.Error(w, "Failed to fetch stylesheet", http.StatusBadGateway)
 		return
@@ -196,6 +290,13 @@ func proxyStylesheet(w http.ResponseWriter, _ *http.Request, url string) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Fonts-ID", version)
 	w.Header().Set("Link", "<https://upset.dev/fonts>; rel=\"help\"")
+	if cacheEnabled {
+		if hit {
+			w.Header().Set("X-Fonts-Cache", "HIT")
+		} else {
+			w.Header().Set("X-Fonts-Cache", "MISS")
+		}
+	}
 
 	w.Write([]byte(css))
 }

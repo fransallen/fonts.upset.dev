@@ -2,6 +2,13 @@
 
 A privacy-preserving proxy for Google Fonts. It fetches font stylesheets and font files on behalf of visitors so their IP addresses and browser fingerprints are never sent to Google.
 
+## Features
+
+- Proxies Google Fonts stylesheets and font files without exposing visitor IP addresses or browser fingerprints to Google.
+- Rewrites font URLs in stylesheets to route through the proxy automatically.
+- Minifies CSS stylesheets before serving them.
+- Built-in cache via local disk to avoid redundant upstream requests.
+
 ## How it works
 
 When a browser requests a Google Fonts stylesheet through this proxy, the server:
@@ -60,10 +67,12 @@ The server listens on `http://localhost:8080`.
 
 ## Environment variables
 
-| Variable     | Description                                                       | Default  |
-| ------------ | ----------------------------------------------------------------- | -------- |
-| `GITHUB_TAG` | Release version tag, included in the `X-Fonts-ID` response header | `1.0`    |
-| `POP_ID`     | Point-of-presence identifier appended to `X-Fonts-ID`             | _(none)_ |
+| Variable        | Description                                       | Default        |
+| --------------- | ------------------------------------------------- | -------------- |
+| `CACHE_ENABLED` | Set to `true` to enable the local disk cache      | `false`        |
+| `CACHE_DIR`     | Directory used to store cached CSS and font files | `.fonts-cache` |
+
+When the cache is enabled, responses include an `X-Fonts-Cache` header set to `HIT` or `MISS`.
 
 ## Routes
 

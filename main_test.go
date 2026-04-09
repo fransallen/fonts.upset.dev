@@ -79,7 +79,7 @@ func TestFetchCSSRewritesFontURLs(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	result, err := fetchCSS(upstream.URL)
+	result, _, err := fetchCSS(upstream.URL)
 	if err != nil {
 		t.Fatalf("fetchCSS returned error: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestFetchCSSPreservesFontFamily(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	result, err := fetchCSS(upstream.URL)
+	result, _, err := fetchCSS(upstream.URL)
 	if err != nil {
 		t.Fatalf("fetchCSS returned error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestFetchCSSUpstreamError(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	_, err := fetchCSS(upstream.URL)
+	_, _, err := fetchCSS(upstream.URL)
 	if err == nil {
 		t.Error("expected error for non-200 upstream response, got nil")
 	}
