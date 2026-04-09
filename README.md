@@ -13,9 +13,9 @@ A privacy-preserving proxy for Google Fonts. It fetches font stylesheets and fon
 
 When a browser requests a Google Fonts stylesheet through this proxy, the server:
 
-1. Fetches the CSS from `fonts.googleapis.com` using a fixed user-agent string
-2. Minifies the CSS and rewrites all font file URLs to point back through the proxy
-3. Returns the rewritten stylesheet to the browser
+1. Fetches the CSS from `fonts.googleapis.com` using a fixed user-agent string.
+2. Minifies the CSS and rewrites all font file URLs to point back through the proxy.
+3. Returns the rewritten stylesheet to the browser.
 
 Font file requests (`.woff2`, etc.) are proxied directly from `fonts.gstatic.com`. In both cases, only a strict set of safe headers is forwarded so no cookies, IP addresses, or other user-identifying information ever reaches Google.
 
