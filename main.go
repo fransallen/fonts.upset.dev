@@ -33,6 +33,9 @@ var (
 	// Local disk cache.
 	cacheEnabled bool
 	cacheDir     string
+
+	// Dev mode: verbose request logging.
+	logMode bool
 )
 
 func main() {
@@ -46,6 +49,12 @@ func main() {
 	}
 	if popID := os.Getenv("POP_ID"); popID != "" {
 		version += "-" + popID
+	}
+
+	// Log mode.
+	logMode = os.Getenv("FONTS_LOG") == "true"
+	if logMode {
+		log.Println("log mode enabled")
 	}
 
 	// Initialise local cache.
@@ -89,11 +98,14 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	if strings.HasPrefix(r.URL.Path, "/css") {
 		// Proxy stylesheet request
-		url := backendCSS + r.URL.Path
+		normalized := r.URL.Path
 		if r.URL.RawQuery != "" {
-			url += "?" + normalizeGoogleFontsQuery(r.URL.RawQuery)
+			normalized += "?" + normalizeGoogleFontsQuery(r.URL.RawQuery)
 		}
-		proxyStylesheet(w, r, url)
+		if logMode {
+			log.Printf("css: %s", normalized)
+		}
+		proxyStylesheet(w, r, backendCSS+normalized)
 		return
 	}
 
