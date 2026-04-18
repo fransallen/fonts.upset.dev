@@ -3,6 +3,9 @@ version: "3.8"
 services:
   fonts-upset-dev:
     image: ghcr.io/fransallen/fonts.upset.dev:latest
+    environment:
+      - FONTS_LOG
+      - POP_ID
     networks:
       - traefik-public
     deploy:

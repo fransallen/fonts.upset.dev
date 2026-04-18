@@ -76,7 +76,7 @@ func main() {
 		}
 	}
 
-	http.HandleFunc("/", handleRequest)
+	http.Handle("/", http.AllowQuerySemicolons(http.HandlerFunc(handleRequest)))
 	log.Println("fonts.upset.dev is running on http://localhost:8080")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal(err)
@@ -317,12 +317,12 @@ func proxyStylesheet(w http.ResponseWriter, _ *http.Request, url string) {
 // \u0026 (HTML/JSON-encoded "&") in place of proper separators.
 // Within a family axis-value tuple (e.g. "...@0,...;1,..."), the separator
 // between tuples must be ";", while query-parameter boundaries use "&".
-// Rule: \u0026 followed by a digit → ";" (axis-tuple separator);
-//
-//	remaining \u0026 → "&" (query-parameter separator).
+// Rules:
+//   - \u0026 or & followed by a digit → ";" (axis-tuple separator)
+//   - remaining \u0026 → "&" (query-parameter separator)
 func normalizeGoogleFontsQuery(query string) string {
-	// \u0026 before a digit is an axis-tuple separator → semicolon
-	query = regexp.MustCompile(`\\u0026(\d)`).ReplaceAllString(query, ";$1")
+	// \u0026 or & before a digit is an axis-tuple separator → semicolon
+	query = regexp.MustCompile(`(?:\\u0026|&)(\d)`).ReplaceAllString(query, ";$1")
 	// Everything else is a query-parameter boundary → ampersand
 	query = strings.ReplaceAll(query, `\u0026`, "&")
 	return query
