@@ -91,7 +91,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		// Proxy stylesheet request
 		url := backendCSS + r.URL.Path
 		if r.URL.RawQuery != "" {
-			url += "?" + r.URL.RawQuery
+			url += "?" + normalizeGoogleFontsQuery(r.URL.RawQuery)
 		}
 		proxyStylesheet(w, r, url)
 		return
@@ -299,6 +299,21 @@ func proxyStylesheet(w http.ResponseWriter, _ *http.Request, url string) {
 	}
 
 	w.Write([]byte(css))
+}
+
+// normalizeGoogleFontsQuery normalises a raw query string that may contain
+// \u0026 (HTML/JSON-encoded "&") in place of proper separators.
+// Within a family axis-value tuple (e.g. "...@0,...;1,..."), the separator
+// between tuples must be ";", while query-parameter boundaries use "&".
+// Rule: \u0026 followed by a digit → ";" (axis-tuple separator);
+//
+//	remaining \u0026 → "&" (query-parameter separator).
+func normalizeGoogleFontsQuery(query string) string {
+	// \u0026 before a digit is an axis-tuple separator → semicolon
+	query = regexp.MustCompile(`\\u0026(\d)`).ReplaceAllString(query, ";$1")
+	// Everything else is a query-parameter boundary → ampersand
+	query = strings.ReplaceAll(query, `\u0026`, "&")
+	return query
 }
 
 // preserveFontFamilies extracts font-family declarations from original CSS

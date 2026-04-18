@@ -3,34 +3,44 @@ version: "3.8"
 services:
   fonts-upset-dev:
     image: ghcr.io/fransallen/fonts.upset.dev:latest
-
-    ports:
-      - "8081:8080"
-
+    networks:
+      - traefik-public
     deploy:
       replicas: 2
+      labels:
+        - traefik.enable=true
 
-      # Resource limits
+        # HTTPS router
+        - traefik.http.routers.fonts-upset-dev-secure.rule=Host(`fonts.upset.dev`)
+        - traefik.http.routers.fonts-upset-dev-secure.entrypoints=websecure
+        - traefik.http.routers.fonts-upset-dev-secure.tls=true
+        - traefik.http.routers.fonts-upset-dev-secure.service=fonts-upset-dev
+
+        # HTTP router (serves real traffic)
+        - traefik.http.routers.fonts-upset-dev.rule=Host(`fonts.upset.dev`)
+        - traefik.http.routers.fonts-upset-dev.entrypoints=web
+        - traefik.http.routers.fonts-upset-dev.service=fonts-upset-dev
+
+        # Service
+        - traefik.http.services.fonts-upset-dev.loadbalancer.server.port=8080
       resources:
         limits:
           cpus: "0.5"
-          memory: 256MB
-
-      # Update strategy
+          memory: 256M
       update_config:
         parallelism: 1
         delay: 10s
         order: start-first
         failure_action: rollback
-
-      # Rollback strategy
       rollback_config:
         parallelism: 1
         delay: 5s
-
-      # Restart policy
       restart_policy:
         condition: on-failure
         delay: 5s
         max_attempts: 3
         window: 120s
+
+networks:
+  traefik-public:
+    external: true
